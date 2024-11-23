@@ -1,2 +1,2 @@
-requests
-python-telegram-bot
+requests==2.31.0           # For making HTTP requests to DEX Screener API
+python-telegram-bot==20.3  # For interacting with the Telegram Bot API
