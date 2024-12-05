@@ -4,6 +4,8 @@ import json
 from telegram import Bot
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
+PORT = os.getenv("PORT", 5000)
+
 
 # Load environment variables from .env file
 load_dotenv()
