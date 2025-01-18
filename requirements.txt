@@ -1,4 +1,5 @@
 flask==2.0.1
+werkzeug==2.0.3
 python-telegram-bot==20.3
 python-dotenv==1.0.0
 requests==2.31.0
