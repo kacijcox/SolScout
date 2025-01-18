@@ -123,3 +123,4 @@ flask
 python-telegram-bot
 python-dotenv
 requests
+echo "gunicorn" >> requirements.txt
