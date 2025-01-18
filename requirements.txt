@@ -4,3 +4,4 @@ python-telegram-bot==20.3
 python-dotenv==1.0.0
 requests==2.31.0
 gunicorn==22.0.0
+aioflask==0.4.0
