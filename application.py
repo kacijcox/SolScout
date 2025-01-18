@@ -122,6 +122,23 @@ def test():
         logger.error(f"Test message failed: {str(e)}")
         return f"Error sending message: {str(e)}"
 
+@app.route("/botinfo")
+def botinfo():
+    try:
+        bot_info = bot.get_me()
+        chat_info = bot.get_chat(chat_id=CHAT_ID)
+        return f"""
+        Bot Information:
+        Name: {bot_info.first_name}
+        Username: {bot_info.username}
+        Current CHAT_ID: {CHAT_ID}
+        Chat Type: {chat_info.type}
+        Chat Title: {chat_info.title if hasattr(chat_info, 'title') else 'N/A'}
+        """
+    except Exception as e:
+        logger.error(f"Error getting bot info: {str(e)}")
+        return f"Error: {str(e)}"
+
 def run_bot_periodically():
     """Run the bot check every 15 minutes"""
     while True:
