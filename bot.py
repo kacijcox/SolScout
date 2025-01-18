@@ -4,8 +4,12 @@ import json
 from telegram import Bot
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-PORT = os.getenv("PORT", 5000)
+from flask import Flask
+import threading
+import time
 
+# Initialize Flask app
+app = Flask(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,6 +18,7 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")  # Your chat or group ID
 ALERTED_COINS_FILE = "alerted_coins.json"  # File to track alerted coins
+PORT = int(os.environ.get("PORT", 5000))
 
 # Initialize the bot
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -44,45 +49,69 @@ def check_new_coins():
     """Fetch data from DEX Screener and send alerts for new Solana coins."""
     url = "https://api.dexscreener.com/latest/dex/search?q=solana"  # Solana pairs
     alerted_coins = load_alerted_coins()
-
+    
     try:
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
-
+        
         # Current UTC time (timezone-aware)
         current_time = datetime.now(timezone.utc)
-
+        
         # Iterate through pairs and filter for Solana
         for pair in data.get("pairs", []):
             # Check if the chainId is Solana
             if pair.get("chainId") != "solana":
                 continue
-
+            
             # Extract required fields
             coin_name = pair["baseToken"]["name"]
             volume = float(pair.get("volume", {}).get("h24", 0))  # Use appropriate volume field
             creation_timestamp = pair.get("pairCreatedAt", 0)  # Pair creation time (in milliseconds)
             pair_url = pair.get("url", "N/A")  # URL for the pair details
-
+            
             # Skip if no creation timestamp
             if not creation_timestamp:
                 continue
-
+            
             # Convert creation timestamp to datetime (timezone-aware)
             creation_time = datetime.fromtimestamp(creation_timestamp / 1000, tz=timezone.utc)
             age_in_minutes = (current_time - creation_time).total_seconds() / 60
-
+            
             # Alert only for new coins within the first hour with volume > $500,000
             if age_in_minutes <= 60 and volume > 500000 and coin_name not in alerted_coins:
                 send_alert(coin_name, volume, pair_url)
                 alerted_coins.add(coin_name)  # Mark this coin as alerted
-
+        
         # Save the updated list of alerted coins
         save_alerted_coins(alerted_coins)
-
+    
     except requests.RequestException as e:
         print(f"Error fetching data from DEX Screener: {e}")
 
+# Flask routes
+@app.route("/")
+def home():
+    return "Solana Scout Bot is running!"
+
+@app.route("/health")
+def health():
+    return "OK", 200
+
+def run_bot_periodically():
+    """Run the bot check every 15 minutes"""
+    while True:
+        try:
+            check_new_coins()
+        except Exception as e:
+            print(f"Error in bot execution: {e}")
+        time.sleep(900)  # Sleep for 15 minutes (900 seconds)
+
 if __name__ == "__main__":
-    check_new_coins()
+    # Start the bot checking thread
+    bot_thread = threading.Thread(target=run_bot_periodically)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Start the Flask server
+    app.run(host="0.0.0.0", port=PORT)
