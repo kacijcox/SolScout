@@ -5,17 +5,16 @@ import logging
 from telegram import Bot
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-from quart import Quart
-import threading
-import time
+from fastapi import FastAPI
 import asyncio
+from typing import Dict, Any
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Initialize Quart app
-app = Quart(__name__)
+# Initialize FastAPI app
+app = FastAPI()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,7 +23,6 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")  # Your chat or group ID
 ALERTED_COINS_FILE = "alerted_coins.json"  # File to track alerted coins
-PORT = int(os.environ.get("PORT", 5000))
 
 # Debug logging
 logger.debug(f"Starting application with TELEGRAM_TOKEN: {TELEGRAM_TOKEN[:4]}..." if TELEGRAM_TOKEN else "No token found")
@@ -32,16 +30,6 @@ logger.debug(f"CHAT_ID: {CHAT_ID}")
 
 # Initialize the bot
 bot = Bot(token=TELEGRAM_TOKEN)
-
-async def test_bot_connection():
-    """Test the bot connection and configuration"""
-    try:
-        bot_info = await bot.get_me()
-        logger.debug(f"Bot connection successful. Bot name: {bot_info.first_name}")
-        return True
-    except Exception as e:
-        logger.error(f"Bot connection failed: {str(e)}")
-        return False
 
 def load_alerted_coins():
     """Load the list of alerted coins from a file."""
@@ -55,7 +43,7 @@ def save_alerted_coins(alerted_coins):
     with open(ALERTED_COINS_FILE, "w") as file:
         json.dump(list(alerted_coins), file)
 
-async def send_alert(coin_name, volume, pair_url):
+async def send_alert(coin_name: str, volume: float, pair_url: str):
     """Send an alert message to Telegram."""
     try:
         message = (
@@ -107,43 +95,12 @@ async def check_new_coins():
     except requests.RequestException as e:
         logger.error(f"Error fetching data from DEX Screener: {e}")
 
-@app.route("/")
-async def home():
-    return "Solana Scout Bot is running!"
-
-@app.route("/test")
-async def test():
-    try:
-        await bot.send_message(chat_id=CHAT_ID, text="Test message from bot")
-        logger.debug("Test message sent successfully")
-        return "Test message sent successfully!"
-    except Exception as e:
-        logger.error(f"Test message failed: {str(e)}")
-        return f"Error sending message: {str(e)}"
-
-@app.route("/botinfo")
-async def botinfo():
-    try:
-        bot_info = await bot.get_me()
-        chat_info = await bot.get_chat(chat_id=CHAT_ID)
-        return f"""
-        Bot Information:
-        Name: {bot_info.first_name}
-        Username: {bot_info.username}
-        Current CHAT_ID: {CHAT_ID}
-        Chat Type: {chat_info.type}
-        Chat Title: {getattr(chat_info, 'title', 'N/A')}
-        """
-    except Exception as e:
-        logger.error(f"Error getting bot info: {str(e)}")
-        return f"Error: {str(e)}"
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(run_bot_periodically())
 
 async def run_bot_periodically():
     """Run the bot check every 15 minutes"""
-    if not await test_bot_connection():
-        logger.error("Bot initialization failed")
-        return
-
     while True:
         try:
             logger.debug("Starting periodic check")
@@ -152,11 +109,36 @@ async def run_bot_periodically():
             logger.error(f"Error in bot execution: {e}")
         await asyncio.sleep(900)  # Sleep for 15 minutes
 
-@app.before_serving
-async def startup():
-    app.background_tasks = set()
-    task = asyncio.create_task(run_bot_periodically())
-    app.background_tasks.add(task)
+@app.get("/")
+async def root():
+    return {"message": "Solana Scout Bot is running!"}
+
+@app.get("/test")
+async def test():
+    try:
+        await bot.send_message(chat_id=CHAT_ID, text="Test message from bot")
+        logger.debug("Test message sent successfully")
+        return {"message": "Test message sent successfully!"}
+    except Exception as e:
+        logger.error(f"Test message failed: {str(e)}")
+        return {"error": str(e)}
+
+@app.get("/botinfo")
+async def botinfo():
+    try:
+        bot_info = await bot.get_me()
+        chat_info = await bot.get_chat(chat_id=CHAT_ID)
+        return {
+            "bot_name": bot_info.first_name,
+            "bot_username": bot_info.username,
+            "chat_id": CHAT_ID,
+            "chat_type": chat_info.type,
+            "chat_title": getattr(chat_info, "title", "N/A")
+        }
+    except Exception as e:
+        logger.error(f"Error getting bot info: {str(e)}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
