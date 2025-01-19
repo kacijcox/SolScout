@@ -5,18 +5,17 @@ import logging
 from telegram import Bot
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
-from flask import Flask
+from quart import Quart
 import threading
 import time
 import asyncio
-from aioflask import Flask
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Initialize Quart app
+app = Quart(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -43,37 +42,6 @@ async def test_bot_connection():
     except Exception as e:
         logger.error(f"Bot connection failed: {str(e)}")
         return False
-
-@app.route("/")
-async def home():
-    return "Solana Scout Bot is running!"
-
-@app.route("/test")
-async def test():
-    try:
-        await bot.send_message(chat_id=CHAT_ID, text="Test message from bot")
-        logger.debug("Test message sent successfully")
-        return "Test message sent successfully!"
-    except Exception as e:
-        logger.error(f"Test message failed: {str(e)}")
-        return f"Error sending message: {str(e)}"
-
-@app.route("/botinfo")
-async def botinfo():
-    try:
-        bot_info = await bot.get_me()
-        chat_info = await bot.get_chat(chat_id=CHAT_ID)
-        return f"""
-        Bot Information:
-        Name: {bot_info.first_name}
-        Username: {bot_info.username}
-        Current CHAT_ID: {CHAT_ID}
-        Chat Type: {chat_info.type}
-        Chat Title: {getattr(chat_info, 'title', 'N/A')}
-        """
-    except Exception as e:
-        logger.error(f"Error getting bot info: {str(e)}")
-        return f"Error: {str(e)}"
 
 def load_alerted_coins():
     """Load the list of alerted coins from a file."""
@@ -139,6 +107,37 @@ async def check_new_coins():
     except requests.RequestException as e:
         logger.error(f"Error fetching data from DEX Screener: {e}")
 
+@app.route("/")
+async def home():
+    return "Solana Scout Bot is running!"
+
+@app.route("/test")
+async def test():
+    try:
+        await bot.send_message(chat_id=CHAT_ID, text="Test message from bot")
+        logger.debug("Test message sent successfully")
+        return "Test message sent successfully!"
+    except Exception as e:
+        logger.error(f"Test message failed: {str(e)}")
+        return f"Error sending message: {str(e)}"
+
+@app.route("/botinfo")
+async def botinfo():
+    try:
+        bot_info = await bot.get_me()
+        chat_info = await bot.get_chat(chat_id=CHAT_ID)
+        return f"""
+        Bot Information:
+        Name: {bot_info.first_name}
+        Username: {bot_info.username}
+        Current CHAT_ID: {CHAT_ID}
+        Chat Type: {chat_info.type}
+        Chat Title: {getattr(chat_info, 'title', 'N/A')}
+        """
+    except Exception as e:
+        logger.error(f"Error getting bot info: {str(e)}")
+        return f"Error: {str(e)}"
+
 async def run_bot_periodically():
     """Run the bot check every 15 minutes"""
     if not await test_bot_connection():
@@ -153,12 +152,11 @@ async def run_bot_periodically():
             logger.error(f"Error in bot execution: {e}")
         await asyncio.sleep(900)  # Sleep for 15 minutes
 
+@app.before_serving
+async def startup():
+    app.background_tasks = set()
+    task = asyncio.create_task(run_bot_periodically())
+    app.background_tasks.add(task)
+
 if __name__ == "__main__":
-    # Create event loop
-    loop = asyncio.get_event_loop()
-    
-    # Start the bot checking task
-    loop.create_task(run_bot_periodically())
-    
-    # Start the Flask server
     app.run(host="0.0.0.0", port=PORT)
